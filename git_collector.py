@@ -59,50 +59,50 @@ def check_git_root_directory() -> None:
         )
         sys.exit(1)
 
-    def get_current_branch() -> str:
-        """현재 작업 중인 Git 브랜치 이름을 가져옵니다 (예: main, feature/login)."""
-        try:
-            branch = run_git_command(["branch", "--show-current"]).strip()
-            return branch if branch else "HEAD (detached)"
-        except RuntimeError:
-            return "unknown"
+def get_current_branch() -> str:
+    """현재 작업 중인 Git 브랜치 이름을 가져옵니다 (예: main, feature/login)."""
+    try:
+        branch = run_git_command(["branch", "--show-current"]).strip()
+        return branch if branch else "HEAD (detached)"
+    except RuntimeError:
+        return "unknown"
 
-    def collect_git_changes() -> Tuple[List[str], str]:
-        """
-        `git status`로 변경된 파일 이름 목록을 모으고,
-        `git diff`로 어떤 코드가 수정되었는지 상세 텍스트를 모아서 반환합니다.
-        """
-        # 1) 변경된 파일 목록 수집 (`git status --porcelain -uall`)
-        status_output = run_git_command(["status", "--porcelain", "-uall"])
-        changed_files: List[str] = []
+def collect_git_changes() -> Tuple[List[str], str]:
+    """
+    `git status`로 변경된 파일 이름 목록을 모으고,
+    `git diff`로 어떤 코드가 수정되었는지 상세 텍스트를 모아서 반환합니다.
+    """
+    # 1) 변경된 파일 목록 수집 (`git status --porcelain -uall`)
+    status_output = run_git_command(["status", "--porcelain", "-uall"])
+    changed_files: List[str] = []
 
-        for line in status_output.splitlines():
-            if not line.strip()
+    for line in status_output.splitlines():
+        if not line.strip():
             continue
-        # 앞의 3글자(예: " M ", "?? ")를 잘라내고 파일 경로만 추출합니다.
-            filepath = line[3:].strip()
-            changed_files.append(file_path)
-        
-        # 2) 상세 코드 변경 내용 수집(`git diff`)
-        # 아직 `git add` 안 한 변경사항(unstaged)과 `git add` 한 변경 사항(staged)을 모두 가져옵니다.
-        unstaged_diff = run_git_command([diff])
-        staged_diff = run_git_command(["diff", "--cached"])
+    # 앞의 3글자(예: " M ", "?? ")를 잘라내고 파일 경로만 추출합니다.
+        file_path = line[3:].strip()
+        changed_files.append(file_path)
+    
+    # 2) 상세 코드 변경 내용 수집(`git diff`)
+    # 아직 `git add` 안 한 변경사항(unstaged)과 `git add` 한 변경 사항(staged)을 모두 가져옵니다.
+    unstaged_diff = run_git_command(["diff"])
+    staged_diff = run_git_command(["diff", "--cached"])
 
-        combined_diff_parts: List[str] = []
-        if staged_diff.strip():
-            combined_diff_parts.append("# [Staged Changes (git diff --cached)]\n" + staged_diff.strip())
-        if unstaged_diff.strip():
-            combined_diff_parts.append("# [Unstaged Changes (git diff)]\n" + unstaged_diff.strip())
-        
-        diff_text = "\n\n".join(combined_diff_parts)
+    combined_diff_parts: List[str] = []
+    if staged_diff.strip():
+        combined_diff_parts.append("# [Staged Changes (git diff --cached)]\n" + staged_diff.strip())
+    if unstaged_diff.strip():
+        combined_diff_parts.append("# [Unstaged Changes (git diff)]\n" + unstaged_diff.strip())
+    
+    diff_text = "\n\n".join(combined_diff_parts)
 
-        # 새로 만든 파일(Untracked, ??)만 있을 때는 git diff 결과가 비어있으므로 파일 목록을 대신 넣어줍니다.
-        if changed_files and not diff_text.strip():
-            diff_text = (
-                "# 새로 추가된 파일(Untracked files) 등으로 인해 상세 텍스트 diff가 비어있습니다.\n"
-                "# 변경된 파일 목록:\n" + "\n".join(f"- {f}" for f in changed_files)
-            )
-        
+    # 새로 만든 파일(Untracked, ??)만 있을 때는 git diff 결과가 비어있으므로 파일 목록을 대신 넣어줍니다.
+    if changed_files and not diff_text.strip():
+        diff_text = (
+            "# 새로 추가된 파일(Untracked files) 등으로 인해 상세 텍스트 diff가 비어있습니다.\n"
+            "# 변경된 파일 목록:\n" + "\n".join(f"- {f}" for f in changed_files)
+        )
+    
     return changed_files, diff_text
 
 def apply_safe_mode(
@@ -110,7 +110,7 @@ def apply_safe_mode(
     diff_text: str,
     max_files: int = 10,
     max_lines: int = 200,
-) -> Tuple[List[str], str]
+) -> Tuple[List[str], str]:
     """
     `-safe-mode` 옵션을 켰을 때 동작하는 보안함수입니다.
     1) 이메일, API 키, 비밀번호 같은 민감정보를 `[MASKED_*]`로 가립니다.
