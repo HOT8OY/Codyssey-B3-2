@@ -20,6 +20,7 @@ example/
 ├── ai_client.py      # 환경변수 로드 및 AI REST API(OpenAI / Gemini) 호출·예외 처리
 ├── validator.py      # 출력 텍스트 길이 제한(72자/80자) 및 필수 섹션/불릿 검증·보정
 ├── STUDY_GUIDE.md    # 초심자를 위한 개념 설명 및 5단계 구현 가이드
+├── AI_API_GUIDE.md   # OpenAI(GPT-5+) / Gemini / Claude 세대별 REST API 파라미터 완벽 가이드
 └── README.md         # 프로젝트 사용 설명서
 ```
 
