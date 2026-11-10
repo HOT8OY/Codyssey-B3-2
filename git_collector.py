@@ -126,8 +126,8 @@ def apply_safe_mode(
     email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
     masked_diff = re.sub(email_pattern, "[MASKED_EMAIL]", masked_diff)
 
-    # (2) 대표 API Key 형태 가리기 (OpenAI 'sk-...', Google 'AIza...', GitHub 'ghp_...')
-    token_pattern = r"\b(sk-[a-zA-Z0-9_-]{15,}|AIza[0-9A-Za-z_-]{20,}|ghp_[0-9A-Za-z]{20,})\b"
+    # (2) 대표 API Key 형태 가리기 (OpenAI 'sk-...', Google 'AQ.Ab...' / 'AIza...', GitHub 'ghp_...')
+    token_pattern = r"\b(sk-[a-zA-Z0-9_-]{15,}|AQ\.[0-9A-Za-z._-]{15,}|AIza[0-9A-Za-z_-]{20,}|ghp_[0-9A-Za-z]{20,})\b"
     masked_diff = re.sub(token_pattern, "[MASKED_API_KEY]", masked_diff)
 
     # (3) 코드 내 변수 할당 형태 가리기 (예: password = "1234" -> password = "[MASKED_SECRET]")

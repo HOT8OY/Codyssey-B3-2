@@ -56,8 +56,8 @@
 | 함수 이름 | 입력값 (매개변수) | 반환값 (Return) | 하는 일 |
 | :--- | :--- | :--- | :--- |
 | `get_api_key()` | 없음 | `str` (API 키 문자열) | `AI_API_KEY` 환경변수를 읽어오며, 설정되지 않았으면 안내 문구를 출력하고 종료합니다. |
-| `is_openai_reasoning_or_gpt5_plus(model)` | `model: str` | `bool` (`True`/`False`) | 모델이 `gpt-5`, `gpt-6`, `o1`, `o3`, `o4` 등 최신 추론 모델인지 확인합니다. |
-| `call_ai_api(...)` | `system_prompt`, `user_prompt`, `model`, `temperature`, `max_tokens` | `str` (AI가 생성한 텍스트) | OpenAI / Gemini / Claude 중 알맞은 서버로 HTTP POST 요청을 보내고 응답을 추출합니다. |
+| `is_gemini_request(model, api_key)` | `model: str`, `api_key: str` | `bool` (`True`/`False`) | 모델명(`gemini-4-argon` 등)이나 API 키(`AQ.Ab...` 시작)를 보고 Gemini 요청인지 판별합니다. |
+| `call_ai_api(...)` | `system_prompt`, `user_prompt`, `model`, `temperature`, `max_tokens` | `str` (AI가 생성한 텍스트) | OpenAI(GPT-6) / Gemini(Gemini 4/3.8) / Claude 중 알맞은 서버로 HTTP POST 요청을 보내고 응답을 추출합니다. |
 
 #### ④ [`validator.py`](file:///Users/4321qwaszx9029/Codyssey-B3-2/example/validator.py) — 출력 검증 및 후처리 모듈
 | 함수 이름 | 입력값 (매개변수) | 반환값 (Return) | 하는 일 |
@@ -233,9 +233,9 @@ result = subprocess.run(
 
   # 2) 실제 API 키를 등록한 뒤 짧은 인사말이 잘 돌아오는지 테스트
   export AI_API_KEY="발급받은_진짜_API_KEY"
-  python3 -c "from ai_client import call_ai_api; print(call_ai_api('너는 친절한 개발 도우미야.', '한 줄로 짧게 인사해줘.', 'gpt-4o-mini', 0.3, 100))"
+  python3 -c "from ai_client import call_ai_api; print(call_ai_api('너는 친절한 개발 도우미야.', '한 줄로 짧게 인사해줘.', 'gpt-6-luna', 0.3, 1500))"
   ```
-  - **정상 확인 기준**: 1번에서 `[ERROR] AI_API_KEY 환경변수가 설정되지 않았습니다.`가 출력되고, 2번에서 AI의 한 줄 인사말이 터미널에 찍히면 성공입니다! (Gemini 키라면 `'gpt-4o-mini'` 대신 `'gemini-2.5-flash'` 입력)
+  - **정상 확인 기준**: 1번에서 `[ERROR] AI_API_KEY 환경변수가 설정되지 않았습니다.`가 출력되고, 2번에서 AI의 한 줄 인사말이 터미널에 찍히면 성공입니다! (Gemini 키(`AQ.Ab...`)라면 자동으로 Gemini API로 연결되거나 `'gemini-3.8-flash'`, `'gemini-4-argon'`을 입력하시면 됩니다)
 
 ---
 

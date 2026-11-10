@@ -37,7 +37,7 @@ python3 example/main.py --help
 ## 2. 환경변수(API Key) 설정 방법
 
 보안을 위해 API Key는 코드에 하드코딩하지 않으며, 반드시 `AI_API_KEY` 환경변수로 설정해야 합니다.
-OpenAI API Key(`sk-...`)와 Google Gemini API Key(`AIza...`)를 모두 자동으로 인식합니다.
+OpenAI API Key(`sk-...`)와 Google Gemini API Key(`AQ.Ab...`)를 모두 자동으로 인식합니다.
 
 ```bash
 # macOS / Linux (zsh, bash)
@@ -65,11 +65,11 @@ python3 example/main.py pr
 
 ### CLI 옵션 활용 (`-model`, `-temperature`, `-max-tokens`, `-safe-mode`)
 ```bash
-# 모델, temperature, max_tokens 파라미터 변경 실행
-python3 example/main.py commit -model gpt-4o-mini -temperature 0.2 -max-tokens 500
+# OpenAI GPT-6 모델(gpt-6-luna, gpt-6.1-sol, gpt-6.1-terra, gpt-6-astra) 지정 실행
+python3 example/main.py commit -model gpt-6-luna -max-tokens 1500
 
-# Gemini 모델을 지정하여 PR 초안 생성
-python3 example/main.py pr -model gemini-2.0-flash -temperature 0.3
+# Google Gemini 모델(gemini-3.8-flash, gemini-4-argon, gemini-4-carbon) 지정 실행
+python3 example/main.py pr -model gemini-4-argon -temperature 0.3
 
 # 안전 모드(-safe-mode)를 켜서 민감정보 마스킹 및 diff 전송량 제한 적용
 python3 example/main.py commit -safe-mode
@@ -77,9 +77,9 @@ python3 example/main.py commit -safe-mode
 
 | 옵션 | 기본값 | 설명 |
 | :--- | :--- | :--- |
-| `-model`, `--model` | `gpt-4o-mini` | 호출할 AI 모델명 (`AIza...` 키 사용 시 `gemini-2.0-flash` 자동 전환) |
+| `-model`, `--model` | `gpt-6-luna` | 호출할 AI 모델명 (`AQ.Ab...` 키 사용 시 `gemini-3.8-flash` 자동 전환) |
 | `-temperature`, `--temperature` | `0.3` | 결과의 창의성/무작위성 조절 (`0.0`에 가까울수록 일관된 형식 유지) |
-| `-max-tokens`, `--max-tokens` | `600` | AI가 생성할 최대 응답 토큰 수 |
+| `-max-tokens`, `--max-tokens` | `600` | AI가 생성할 최대 응답 토큰 수 (추론 모델에서는 최소 1500으로 안전 보정) |
 | `-safe-mode`, `--safe-mode` | `False` | 민감정보 정규식 마스킹 및 최대 10개 파일 / 200줄까지만 전송 |
 
 ---

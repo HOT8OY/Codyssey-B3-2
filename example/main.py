@@ -50,8 +50,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-model",
         "--model",
-        default="gpt-4o-mini",
-        help="사용할 AI 모델 이름 (기본값: gpt-4o-mini, Gemini 키 사용 시 gemini-2.0-flash 자동 호환)",
+        default="gpt-6-luna",
+        help="사용할 AI 모델 이름 (기본값: gpt-6-luna, Gemini AQ.Ab 키 사용 시 gemini-3.8-flash 자동 호환)",
     )
     parser.add_argument(
         "-temperature",
