@@ -63,7 +63,9 @@ def call_ai_api(
          * `reasoning_effort` ("low", "medium", "high", "xhigh", "max") 및 `verbosity` ("low", "medium", "high") 지원
        - Google Gemini 계열 (`gemini-4-carbon`, `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.1-pro`):
          * API Key가 `AQ.Ab...`로 시작
-         * `generationConfig` 내 `maxOutputTokens`, `temperature`, `thinkingConfig.thinkingLevel` ("minimal", "low", "medium", "high") 사용
+         * `generationConfig` 내 `maxOutputTokens`, `thinkingConfig.thinkingLevel` ("low", "medium", "high") 사용
+       - Anthropic Claude 계열 (`claude-opus-5`, `claude-sonnet-5`, 최신 `2026-10-21` 규격):
+         * `thinking: {"type": "adaptive"}` 및 `output_config: {"effort": "low"}` 사용
     """
     api_key = get_api_key()
     model_lower = model.lower()
@@ -72,19 +74,27 @@ def call_ai_api(
     is_gemini = is_gemini_request(model, api_key)
     is_claude = model_lower.startswith("claude") or api_key.startswith("sk-ant-")
 
+    # 내부 추론(Thinking/Reasoning) 토큰과 최종 출력 토큰이 합산되므로 3사 공통으로 최소 1500 토큰 확보
+    safe_tokens = max(max_tokens, 1500)
+
+    # 참고: 최근 1년 내 출시된 최신 추론 모델들(GPT-6, Gemini 4/3.8, Claude 5/2026-10-21)은
+    # 샘플링 파라미터(temperature 등)를 지원하지 않거나 전송 시 400 에러를 반환합니다.
+    # 따라서 CLI 요구사항으로 받은 temperature 인자는 하위 호환 시그니처로만 유지하고,
+    # 실제 요청 Payload에서는 추론 강도("low") 옵션으로 제어합니다.
+    _ = temperature
+
     if is_gemini:
         # [Google Gemini REST API (gemini-4-carbon / gemini-4-argon / gemini-3.8-flash / gemini-3.1-pro)]
         # 사용자가 기본값(gpt-6-luna)을 그대로 둔 채 Gemini 키(AQ.Ab...)를 넣은 경우 자동으로 gemini-3.8-flash로 전환
         effective_model = model if model_lower.startswith("gemini") else "gemini-3.8-flash"
+        gemini_base = os.getenv("GEMINI_API_BASE_URL", "https://generativelanguage.googleapis.com")
         url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{gemini_base}/v1beta/models/"
             f"{effective_model}:generateContent?key={api_key}"
         )
         headers = {
             "Content-Type": "application/json",
         }
-        # 내부 추론(Thinking) 토큰과 최종 출력 토큰이 합산되므로 최소 여유 토큰 확보
-        safe_output_tokens = max(max_tokens, 1500)
         payload = {
             "systemInstruction": {
                 "parts": [{"text": system_prompt}]
@@ -93,23 +103,22 @@ def call_ai_api(
                 {"role": "user", "parts": [{"text": user_prompt}]}
             ],
             "generationConfig": {
-                "temperature": temperature,
-                "maxOutputTokens": safe_output_tokens,
+                "maxOutputTokens": safe_tokens,
                 "thinkingConfig": {
-                    # 커밋/PR 요약은 빠른 응답과 비용 절감을 위해 thinkingLevel을 "low"로 설정
+                    # Argon과 3.8-Flash는 "minimal" 미지원(400 에러)이므로 전 모델 공통 호환되는 "low" 사용
                     "thinkingLevel": "low"
                 },
             },
         }
 
     elif is_claude:
-        # [Anthropic Claude REST API]
+        # [Anthropic Claude REST API (claude-opus-5 / claude-sonnet-5, 최신 2026-10-21 규격)]
         effective_model = model if model_lower.startswith("claude") else "claude-sonnet-5"
-        url = "https://api.anthropic.com/v1/messages"
+        url = os.getenv("CLAUDE_API_URL", "https://api.anthropic.com/v1/messages")
         headers = {
             "Content-Type": "application/json",
             "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
+            "anthropic-version": "2026-10-21",
         }
         payload = {
             "model": effective_model,
@@ -117,28 +126,31 @@ def call_ai_api(
             "messages": [
                 {"role": "user", "content": user_prompt}
             ],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
+            "max_tokens": safe_tokens,
+            "thinking": {
+                "type": "adaptive"
+            },
+            "output_config": {
+                "effort": "low"
+            },
         }
 
     else:
-        # [OpenAI Chat Completions REST API (GPT-6 Astra / Sol / Terra / Luna, GPT-5 계열)]
+        # [OpenAI Chat Completions REST API (GPT-6 Astra / Sol / Terra / Luna)]
         url = os.getenv("AI_API_URL", "https://api.openai.com/v1/chat/completions")
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}",
         }
 
-        # 추론 토큰과 출력 토큰이 합산되므로 최소 1500 토큰 이상으로 안전하게 확보합니다.
-        # reasoning_effort="low"는 Astra, Sol, Terra, Luna 전 모델에서 공통으로 지원됩니다.
-        safe_completion_tokens = max(max_tokens, 1500)
+        # Astra와 6.1 Sol은 reasoning_effort="none" 미지원(400 에러)이므로 전 모델 공통 호환되는 "low" 사용
         payload = {
             "model": model,
             "messages": [
                 {"role": "developer", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "max_completion_tokens": safe_completion_tokens,
+            "max_completion_tokens": safe_tokens,
             "reasoning_effort": "low",
             "verbosity": "medium",
         }

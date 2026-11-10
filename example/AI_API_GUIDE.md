@@ -1,55 +1,60 @@
-# 최신 AI REST API 사용법 및 모델·파라미터 완벽 가이드
+# 최신 AI REST API 사용법 및 모델별 지원/미지원 파라미터 완벽 가이드
 
-이 문서는 **OpenAI (GPT-6 / 6.1 계열)**, **Google (Gemini 4 / 3.8 계열)**, **Anthropic (Claude 5 계열)** 3대 AI 서비스의 최신 모델 분류 체계, API Key 규격, 그리고 REST API 호출 파라미터를 공식 스펙 기반으로 정리한 레퍼런스입니다. *(구형 GPT-4 이하 레거시 규격은 제외하고 최신 표준만 다룹니다.)*
+이 문서는 **최근 1년 이내 출시된 최신 AI 모델들** — **OpenAI (GPT-6 / 6.1 계열)**, **Google (Gemini 4 / 3.8 / 3.1 계열)**, **Anthropic (Claude 5 / 4.6+ 계열)** — 의 REST API 호출 구조와 **패러다임 전환으로 인해 사라지거나 금지된(400 에러 유발) 옵션들, 그리고 모델별로 허용되는 옵션의 정확한 경계**를 정리한 레퍼런스입니다.
 
 ---
 
-## 1. 한눈에 보는 3대 AI REST API 비교표
+## 1. 왜 최근 1년 사이 3대 AI의 기존 옵션들이 대거 금지되었을까?
 
-| 구분 | OpenAI (GPT-6 / 6.1 계열) | Google (Gemini 4 / 3.8 계열) | Anthropic (Claude 5 계열) |
+과거(GPT-4, Gemini 1.5, Claude 3 시절)의 AI가 단순 **'다음 단어 확률 예측기'**였다면, 최근 1년 내 출시된 모든 주력 모델은 답변을 내놓기 전 내부적으로 수백~수천 토큰의 **사고 과정(Chain-of-Thought, CoT)**을 거치는 **'추론(Reasoning) 모델'**로 통합되었습니다.
+
+이 때문에 3사 공통으로 다음 변화가 일어났습니다:
+1. **확률 흔들기(`temperature`, `top_p`, `top_k`)의 종말**: 추론 도중 확률 분포를 인위적으로 흔들면 논리 체인이 붕괴되므로, 3사 모두 샘플링 파라미터를 **전면 제거하거나 전송 시 `400 Bad Request` 에러**를 반환합니다.
+2. **토큰 숫자 예산(Budget) $\rightarrow$ 단계형 강도(Effort / Level)로 전환**: 개발자가 생각할 토큰 수를 숫자로 직접 지정하던 방식(`thinkingBudget`, `budget_tokens`)이 폐지되고, `"low"`, `"medium"`, `"high"` 같은 **추론 강도 옵션**으로 통일되었습니다.
+3. **고성능 모델의 '추론 끄기(`none` / `minimal`)' 불가**: 상위 플래그십 모델들은 추론 과정 자체가 모델 지능의 핵심이므로 아예 추론을 끄는 옵션을 허용하지 않습니다.
+
+---
+
+## 2. 한눈에 보는 3대 AI 최신 스펙 및 금지 옵션 요약표
+
+| 구분 | OpenAI (GPT-6 / 6.1 계열) | Google (Gemini 4 / 3.8 / 3.1 계열) | Anthropic (Claude 5 / 4.6+ 계열) |
 | :--- | :--- | :--- | :--- |
-| **API Key 시작 형태** | `sk-...` 또는 `sk-proj-...` | **`AQ.Ab...`** (`AQ.` 시작 Auth Key)<br>*(구형: `AIza...`)* | `sk-ant-...` |
-| **모델 라인업 분류** | **Astra / Sol / Terra / Luna**<br>(`gpt-6-astra`, `gpt-6.1-sol`, `gpt-6.1-terra`, `gpt-6-luna`) | **Carbon / Argon / Flash / Pro**<br>(`gemini-4-carbon`, `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.1-pro`) | **Opus / Sonnet / Haiku**<br>(`claude-opus-5`, `claude-sonnet-5`) |
-| **REST 엔드포인트 (URL)** | `https://api.openai.com/v1/chat/completions`<br>*(또는 `/v1/responses`)* | `https://generativelanguage.googleapis.com/v1beta/models/{모델명}:generateContent?key={API_KEY}` | `https://api.anthropic.com/v1/messages` |
-| **인증 방식 (Header/Query)** | `Authorization: Bearer {API_KEY}` | URL 쿼리(`?key=AQ.Ab...`) 또는<br>`x-goog-api-key: {API_KEY}` | `x-api-key: {API_KEY}`<br>`anthropic-version: 2023-06-01` |
-| **시스템 지시문 위치** | `messages` 배열 내<br>**`role: "developer"`** | 최상위 `systemInstruction` 필드 | 최상위 `system` 필드 |
-| **최대 토큰 제한 파라미터** | **`max_completion_tokens`**<br>*(Responses API는 `max_output_tokens`)* | `generationConfig.maxOutputTokens` | `max_tokens` *(필수 입력)* |
-| **추론(생각) 깊이 조절** | **`reasoning_effort`**<br>(`"none"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`) | **`generationConfig.thinkingConfig.thinkingLevel`**<br>(`"minimal"`, `"low"`, `"medium"`, `"high"`) | **`thinking`**<br>(`type: "adaptive"` 또는 `"enabled"`) |
-| **답변 길이/상세도 스타일** | **`verbosity`**<br>(`"low"`, `"medium"`, `"high"`) | 프롬프트 지시문으로 제어 | 프롬프트 지시문으로 제어 |
+| **API Key 시작 형태** | `sk-...` 또는 `sk-proj-...` | **`AQ.Ab...`** (`AQ.` 시작 Auth Key) | `sk-ant-...` |
+| **최신 주력 모델 ID** | `gpt-6-astra`, `gpt-6.1-sol`,<br>`gpt-6.1-terra`, `gpt-6-luna` | `gemini-4-carbon`, `gemini-4-argon`,<br>`gemini-3.8-flash`, `gemini-3.1-pro` | `claude-opus-5`, `claude-sonnet-5`<br>*(API 버전: `2026-10-21`)* |
+| **시스템 지시문 위치** | `messages` 내 **`role: "developer"`**<br>*(구형 `"system"` 대체)* | 최상위 `systemInstruction` 필드 | 최상위 `system` 필드 |
+| **최대 토큰 제한 옵션** | **`max_completion_tokens`**<br>*(구형 `max_tokens` 전송 시 400 에러)* | `generationConfig.maxOutputTokens` | `max_tokens` *(필수 입력)* |
+| **추론(CoT) 제어 옵션** | **`reasoning_effort`**<br>(`"none"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`) | **`generationConfig.thinkingConfig.thinkingLevel`**<br>(`"minimal"`, `"low"`, `"medium"`, `"high"`) | **`thinking: {"type": "adaptive"}`** +<br>**`output_config: {"effort": "..."}`** |
+| **답변 길이/상세도 제어** | **`verbosity`** (`"low"`, `"medium"`, `"high"`) | 프롬프트 지시문으로 제어 | 프롬프트 지시문으로 제어 |
+| **전송 시 400 에러가 나는<br>대표 금지(폐지) 옵션** | - `max_tokens`<br>- 추론 활성 시: `temperature`, `top_p`, `presence_penalty`, `frequency_penalty`, `logprobs`<br>- Astra/Sol에서 `reasoning_effort: "none"` | - `thinkingBudget` *(구형 숫자 예산)*<br>- `temperature`, `topP`, `topK`, 페널티 옵션<br>- Argon/3.8-Flash에서 `thinkingLevel: "minimal"` | - `temperature`, `top_p`, `top_k` *(기본값 `1.0`조차 전송 금지)*<br>- Assistant Prefill *(답변 첫머리 미리 채우기)*<br>- `thinking.budget_tokens` *(수동 토큰 예산)* |
 
 ---
 
-## 2. OpenAI API (GPT-6 / 6.1 시리즈: Astra, Sol, Terra, Luna)
+## 3. OpenAI (GPT-6 / 6.1 시리즈) 모델별 가능·불가능 옵션 상세
 
-OpenAI의 최신 GPT-6 / 6.1 제품군은 작업의 난이도, 속도, 비용 효율성에 따라 **Astra, Sol, Terra, Luna** 4가지 티어로 분류되며, 모두 **105만(1.05M) 토큰 컨텍스트 윈도우**와 **최대 12만 8천(128K) 출력 토큰**을 지원합니다.
+OpenAI의 GPT-6 제품군은 **Astra, Sol, Terra, Luna** 4가지 티어로 나뉘며, **어떤 모델을 쓰느냐, 그리고 `reasoning_effort`를 무엇으로 두느냐**에 따라 허용되는 파라미터가 엄격히 갈립니다.
 
-### ① GPT-6 / 6.1 모델 라인업 비교
+### ① 모델별 지원 옵션 매트릭스
 
-| 모델 ID | 분류 (티어) | 입력 / 출력 가격<br>*(1M 토큰 기준)* | 지원하는 `reasoning_effort` | 핵심 특징 및 추천 용도 |
-| :--- | :--- | :---: | :--- | :--- |
-| **`gpt-6-astra`** | **Astra** (플래그십) | \$10 / \$50 | `low`, `medium`, `high`, `xhigh`, `max`<br>*(none/minimal 불가)* | 최고 지능과 최고 수준의 추론 능력. 가장 복잡한 아키텍처 설계 및 심층 다단계 추론 작업용 |
-| **`gpt-6.1-sol`** | **Sol** (균형형 고성능) | \$2 / \$10 | `low`, `medium`(기본), `high`, `xhigh`, `max`<br>*(none/minimal 불가)* | Astra에 근접한 코딩·복합 추론 성능을 합리적인 비용으로 제공하는 주력 개발 모델 |
-| **`gpt-6.1-terra`** | **Terra** (에이전트/작문) | \$1 / \$5 | `low` ~ `max` | 시각적 추론(Visual Reasoning), 컴퓨터 제어(Computer Use), 명확하고 자연스러운 문서/커뮤니케이션 작성 특화 |
-| **`gpt-6-luna`** | **Luna** (초고속/경량) | \$0.10 / \$0.50 | `none` ~ `max` 전 범위 허용 | 속도가 가장 빠르고 비용이 극대화된 경량 모델. 커밋/PR 초안 생성 같은 일상적 개발 자동화에 최적 |
+| 모델 ID | 티어 및 특징 | 허용되는 `reasoning_effort` | 추론 끄기 (`"none"` / `"minimal"`) | `temperature`, `top_p` 사용 가능 여부 | `verbosity` 지원 |
+| :--- | :--- | :--- | :---: | :--- | :---: |
+| **`gpt-6-astra`** | 플래그십 최고 지능 | `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"` | ❌ **불가능 (400 에러)** | ❌ **절대 불가** (추론을 끌 수 없으므로 항상 400 에러) | ✅ (`low`/`medium`/`high`) |
+| **`gpt-6.1-sol`** | 코딩·복합 추론 주력 | `"low"`, `"medium"`(기본), `"high"`, `"xhigh"`, `"max"` | ❌ **불가능 (400 에러)** | ❌ **절대 불가** (추론을 끌 수 없으므로 항상 400 에러) | ✅ (`low`/`medium`/`high`) |
+| **`gpt-6.1-terra`** | 시각 추론·컴퓨터 제어·작문 | `"none"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"` | ✅ 가능 | ⚠️ **조건부 가능** (`reasoning_effort: "none"`을 명시했을 때만 허용, 기본값일 땐 400 에러) | ✅ (`low`/`medium`/`high`) |
+| **`gpt-6-luna`** | 초고속·초저비용 경량 | `"none"` ~ `"max"` 전 범위 | ✅ 가능 | ⚠️ **조건부 가능** (`reasoning_effort: "none"`을 명시했을 때만 허용, 기본값일 땐 400 에러) | ✅ (`low`/`medium`/`high`) |
 
-### ② 핵심 파라미터 설명
+### ② OpenAI 호출 시 자주 겪는 `400 Bad Request` 함정 4가지
+1. **`max_tokens` 사용 금지**: 구형 `max_tokens`를 보내면 즉시 `Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.` 에러가 발생합니다.
+2. **추론 활성 상태에서 5대 샘플링 파라미터 금지**:
+   - `reasoning_effort`를 생략(기본값 `"medium"` 적용)하거나 `"low"` 이상으로 둔 상태에서는 **`temperature`, `top_p`, `presence_penalty`, `frequency_penalty`, `logprobs`** 중 단 하나라도 JSON에 포함되면 400 에러가 납니다.
+3. **Astra와 6.1 Sol에서 `"none"` 설정 금지**:
+   - `gpt-6-astra`와 `gpt-6.1-sol`은 무조건 생각을 거쳐야 하는 모델입니다. 속도를 높이겠다고 `reasoning_effort: "none"`이나 `"minimal"`을 넣으면 400 에러가 납니다. **4개 모델 모두에서 에러 없이 도는 최소 추론 단계는 `"low"`입니다.**
+4. **Function/Tool Calling 시 주의점**:
+   - 복잡한 도구 호출과 높은 추론 강도를 함께 쓸 때는 구형 `/v1/chat/completions` 대신 신규 **`/v1/responses`** 엔드포인트(토큰 제한 파라미터명: `max_output_tokens`)를 쓰는 것이 권장됩니다.
 
-1. **`max_completion_tokens` (구형 `max_tokens` 대체)**
-   - 모델이 **내부적으로 생각하는 추론 토큰(Reasoning Tokens)**과 **화면에 출력되는 최종 답변 토큰**을 합산한 최대 토큰 한도입니다.
-   - 주의: 이 값을 너무 작게(예: `200`) 설정하면 내부 추론 과정에서 토큰을 모두 소모해 정작 화면에 보이는 답변이 잘릴 수 있으므로 `1500` 이상으로 여유 있게 주거나 `reasoning_effort`를 `"low"`로 낮추는 것이 좋습니다.
-2. **`reasoning_effort` (추론 강도 조절)**
-   - 모델이 답변하기 전에 얼마나 깊이 생각할지 지정합니다.
-   - `gpt-6-astra`와 `gpt-6.1-sol`은 최소 `"low"`부터 지원하므로, 모든 GPT-6 모델에서 공통으로 호환되게 하려면 **`"low"`** 또는 **`"medium"`**을 사용하는 것이 안전합니다.
-3. **`verbosity` (답변 상세도 조절)**
-   - `"low"`(핵심만 간결하게), `"medium"`(표준 상세도, 기본값), `"high"`(배경 설명과 예시까지 풍부하게) 중 하나로 출력 문장 스타일을 제어합니다.
-4. **`role: "developer"` 및 `temperature` 주의점**
-   - 시스템 지시문은 `"role": "developer"`로 전달합니다.
-   - 추론(`reasoning_effort`)이 동작할 때는 기존 샘플링 파라미터인 `temperature`를 임의 값으로 바꾸면 `400 Bad Request`가 발생할 수 있으므로 생략하는 것이 표준입니다.
-
-### ③ OpenAI 요청 JSON 예시 (`POST https://api.openai.com/v1/chat/completions`)
+### ③ 모든 GPT-6 모델에서 100% 안전하게 동작하는 표준 JSON 예시
 ```json
 {
-  "model": "gpt-6-luna",
+  "model": "gpt-6.1-sol",
   "messages": [
     {
       "role": "developer",
@@ -68,31 +73,29 @@ OpenAI의 최신 GPT-6 / 6.1 제품군은 작업의 난이도, 속도, 비용 �
 
 ---
 
-## 3. Google Gemini API (Gemini 4 / 3.8 / 3.1 시리즈: Carbon, Argon, Flash, Pro)
+## 4. Google Gemini (Gemini 4 / 3.8 / 3.1 시리즈) 모델별 가능·불가능 옵션 상세
 
-### ① API Key 규격 변화 (`AQ.Ab...`)
-- 과거 Google API 키는 `AIza...`로 시작했으나, 최신 Google AI Studio 및 Vertex AI 환경에서 발급되는 인증 키(Auth Key)는 서비스 자격 증명 및 보안 강화를 위해 **`AQ.Ab...` (`AQ.` 접두사)** 형태로 시작합니다.
-- 공식 Gemini REST 엔드포인트(`generativelanguage.googleapis.com`)에 `?key=AQ.Ab...` 형태로 그대로 전달하면 정상 인증됩니다.
+Google 역시 최신 모델에서 숫자 예산(`thinkingBudget`)과 샘플링 옵션(`temperature` 등)을 폐기하고 **`thinkingLevel`** 체계로 전환했습니다.
 
-### ② Gemini 공식 모델 라인업 비교 (`gemini-4-carbon`, `gemini-4-argon`, `gemini-3.8-flash`, `gemini-3.1-pro`)
-Google은 Gemini 4 세대부터 원소 기호 기반 코드명(**Carbon**, **Argon**)을 도입했으며, 초고속 경량 라인은 **Gemini 3.8 Flash**, 기존 Pro 라인은 **Gemini 3.1 Pro**로 구성되어 있습니다.
+### ① 모델별 지원 옵션 매트릭스
 
-| 모델 ID | 분류 (티어) | 핵심 특징 및 추천 용도 |
-| :--- | :--- | :--- |
-| **`gemini-4-carbon`** | **Carbon** (Gemini 4 프론티어) | 장기(Long-horizon) 소프트웨어 엔지니어링, 복잡한 다단계 실행, 사이버보안(취약점 분석 및 패치 검증)에 특화된 최상위 모델 |
-| **`gemini-4-argon`** | **Argon** (Gemini 4 플래그십) | 고급 코딩, 복잡한 수학·과학 문제 해결, 멀티스텝 에이전트 워크플로우용 주력 추론 모델 (1M 통합 컨텍스트 윈도우 지원) |
-| **`gemini-3.8-flash`** | **Flash** (Gemini 3.8 초고속/고효율) | 빠른 응답 속도와 뛰어난 가성비를 갖춘 고지능 주력(Workhorse) 모델. 커밋 메시지 및 PR 초안 자동 생성에 가장 적합 |
-| **`gemini-3.1-pro`** | **Pro** (Gemini 3.1 고성능) | 방대한 문서 분석, 복합 추론, 지식 검색 등 기존 Pro 포지션을 담당하는 모델 |
+| 모델 ID | 티어 및 특징 | 허용되는 `thinkingLevel` | `"minimal"` 단계 지원 여부 | 구형 `thinkingBudget` (숫자) | `temperature` / `topP` / `topK` |
+| :--- | :--- | :--- | :---: | :---: | :--- |
+| **`gemini-4-carbon`** | 프론티어 (장기 엔지니어링·보안) | `"low"`, `"medium"`, `"high"` | ❌ **불가능 (400 에러)** | ❌ **금지 (400 에러)** | ❌ 지원 중단 (무시되거나 페널티 결합 시 400 에러) |
+| **`gemini-4-argon`** | 플래그십 추론 (고급 코딩·수학) | `"low"`, `"medium"`(기본), `"high"` | ❌ **불가능 (400 에러)** | ❌ **금지 (400 에러)** | ❌ 지원 중단 |
+| **`gemini-3.8-flash`** | 초고속·고효율 주력 모델 | `"low"`, `"medium"`(기본), `"high"` | ❌ **불가능 (400 에러)** | ❌ **금지 (400 에러)** | ❌ 지원 중단 |
+| **`gemini-3.1-pro`** | 범용 고성능 문서·추론 모델 | `"minimal"`, `"low"`, `"medium"`, `"high"` | ✅ 가능 | ❌ **금지 (400 에러)** | ❌ 지원 중단 |
 
-### ③ 핵심 파라미터 (`generationConfig` & `thinkingLevel`)
+### ② Gemini 호출 시 자주 겪는 `400 Bad Request` 함정 3가지
+1. **구형 `thinkingBudget` 사용 또는 혼용 금지**:
+   - Gemini 2.5 시절처럼 `"thinkingBudget": 0`이나 `"thinkingBudget": 1024`를 보내면 `"Thinking budget is not supported for this model. Use thinking level instead."`라는 400 에러가 발생합니다.
+2. **`gemini-4-argon` 및 `gemini-3.8-flash`에서 `thinkingLevel: "minimal"` 금지**:
+   - 문서상 enum 목록에는 `"minimal"`이 존재하지만, **`gemini-4-argon`과 `gemini-3.8-flash`는 `"minimal"`을 지원하지 않아 `400 INVALID_ARGUMENT` 에러**를 냅니다.
+   - 따라서 전 모델 공통으로 빠른 응답을 원할 때는 반드시 **`"thinkingLevel": "low"`**를 사용해야 합니다!
+3. **`AQ.Ab...` 인증 키(Auth Key) 규격**:
+   - 최신 Google AI Studio / Vertex AI 키는 과거의 `AIza...`가 아니라 **`AQ.Ab...`**로 시작합니다. 키 형식을 검사하는 코드가 있다면 반드시 `AQ.` 접두사를 허용해야 합니다.
 
-1. **`systemInstruction`**: 시스템 프롬프트를 넣는 최상위 필드입니다.
-2. **`generationConfig.maxOutputTokens`**: 최대 출력 토큰 수를 지정합니다.
-3. **`generationConfig.thinkingConfig.thinkingLevel`**:
-   - 최신 Gemini 모델(`gemini-4-argon`, `gemini-3.8-flash` 등)은 복잡한 토큰 숫자 예산 대신 단계별 추론 설정인 **`thinkingLevel`**을 사용합니다.
-   - 허용 값: `"minimal"` (최소 지연 시간), `"low"` (가벼운 추론), `"medium"` (기본값, 균형), `"high"` (최대 깊이 추론)
-
-### ④ Google Gemini 요청 JSON 예시
+### ③ 모든 최신 Gemini 모델에서 안전하게 동작하는 표준 JSON 예시
 - **URL**: `POST https://generativelanguage.googleapis.com/v1beta/models/gemini-4-argon:generateContent?key=AQ.Ab...`
 
 ```json
@@ -111,7 +114,6 @@ Google은 Gemini 4 세대부터 원소 기호 기반 코드명(**Carbon**, **Arg
     }
   ],
   "generationConfig": {
-    "temperature": 0.3,
     "maxOutputTokens": 1500,
     "thinkingConfig": {
       "thinkingLevel": "low"
@@ -122,41 +124,53 @@ Google은 Gemini 4 세대부터 원소 기호 기반 코드명(**Carbon**, **Arg
 
 ---
 
-## 4. Anthropic Claude API (`POST https://api.anthropic.com/v1/messages`)
+## 5. Anthropic Claude (Claude 5 / 4.6~4.8 시리즈, API `2026-10-21`) 가능·불가능 옵션 상세
 
-- **헤더**: `x-api-key: sk-ant-...` 및 `anthropic-version: 2023-06-01` 필수
-- **필수 파라미터**: `max_tokens`를 반드시 명시해야 하며, 적응형 추론(`"thinking": {"type": "adaptive"}`) 활성화 시에는 `temperature`를 변경하지 않고 생략합니다.
+Anthropic은 Claude 4.6 ~ 5 세대와 새 API 버전(`2026-10-21`)을 발표하면서 가장 과감하게 레거시 기능들을 제거했습니다.
 
+### ① 지원 / 미지원(Breaking Changes) 핵심 정리
+
+| 기능 / 파라미터 | 과거 방식 (폐지 / 400 에러) | 최신 방식 (Claude 4.6 ~ 5+ 표준) | 주의사항 설명 |
+| :--- | :--- | :--- | :--- |
+| **샘플링 파라미터** | `temperature`, `top_p`, `top_k` | **완전 삭제 (생략 필수)** | `2026-10-21` 버전에서는 기본값인 `temperature: 1.0`조차 보내면 **`400 Bad Request`** 발생! 아예 키 자체를 빼야 합니다. |
+| **추론(Thinking) 활성화** | `thinking: {"type": "enabled", "budget_tokens": 4000}` | **`thinking: {"type": "adaptive"}`** | 수동으로 `budget_tokens` 숫자를 넣으면 `400 ValidationException` 발생. 모델이 난이도에 따라 스스로 추론 여부를 결정합니다. |
+| **추론 강도 조절** | `budget_tokens` 숫자로 조절 | **`output_config: {"effort": "low"}`** | `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"` 단계로 추론 깊이를 제어합니다. |
+| **출력 형식 강제** | **Assistant Prefill**<br>(`messages` 끝에 `role: "assistant"` 미리 넣기) | **전면 금지 (400 에러)** $\rightarrow$<br>`output_config.format` 또는 프롬프트 사용 | 답변 첫머리를 강제하던 Prefill 기법은 최신 Claude에서 즉시 400 에러를 반환합니다. |
+| **인증 헤더** | `x-api-key: sk-ant-...` | `Authorization: Bearer sk-ant-...`<br>*(또는 `x-api-key` 호환)* | 최신 SDK(Python v2.0.0+)는 `2026-10-21` 버전과 `Bearer` 헤더를 기본으로 사용합니다. |
+
+### ② 최신 Claude 5 표준 JSON 예시 (`POST https://api.anthropic.com/v1/messages`)
 ```json
 {
   "model": "claude-sonnet-5",
   "system": "당신은 숙련된 소프트웨어 엔지니어입니다.",
   "messages": [
-    { "role": "user", "content": "이 git diff를 요약해 주세요." }
+    {
+      "role": "user",
+      "content": "이 git diff를 요약해 주세요."
+    }
   ],
   "max_tokens": 1500,
-  "temperature": 0.3
+  "thinking": {
+    "type": "adaptive"
+  },
+  "output_config": {
+    "effort": "low"
+  }
 }
 ```
 
 ---
 
-## 5. 우리 프로젝트([`example/ai_client.py`](file:///Users/4321qwaszx9029/Codyssey-B3-2/example/ai_client.py))에서의 실행 예시
+## 6. 결론: 3대 AI를 모두 호환하는 가장 안전한 황금 규칙
 
-우리 예제 코드는 `AI_API_KEY`가 `AQ.Ab...`로 시작하면 자동으로 Gemini REST API로, `sk-...`로 시작하면 OpenAI REST API로 연결하며 모델별 최신 파라미터를 자동 구성합니다.
+최근 1년 이내의 최신 모델들을 호출할 때 `400 Bad Request` 에러를 피하는 핵심 원칙 4가지입니다:
 
-```bash
-# 1) OpenAI GPT-6 모델들로 실행할 때
-export AI_API_KEY="sk-proj-..."
-python3 example/main.py commit -model gpt-6-luna
-python3 example/main.py pr -model gpt-6.1-sol
-python3 example/main.py pr -model gpt-6.1-terra
-python3 example/main.py pr -model gpt-6-astra
-
-# 2) Google Gemini 모델들로 실행할 때
-export AI_API_KEY="AQ.Ab..."
-python3 example/main.py commit -model gemini-3.8-flash
-python3 example/main.py pr -model gemini-3.1-pro
-python3 example/main.py pr -model gemini-4-argon
-python3 example/main.py pr -model gemini-4-carbon
-```
+1. **`temperature`, `top_p`, `top_k`는 JSON Payload에 넣지 않는다.** (미션 요구사항 때문에 CLI 옵션 `-temperature`를 받더라도, 최신 모델 API로 전송할 때는 빼는 것이 에러를 막는 길입니다.)
+2. **추론 강도는 3사 모두 공통으로 지원되는 `"low"`를 기본으로 쓴다.**
+   - OpenAI: `"reasoning_effort": "low"` (`"none"`은 Astra/Sol에서 에러)
+   - Gemini: `"thinkingConfig": {"thinkingLevel": "low"}` (`"minimal"`은 Argon/Flash에서 에러)
+   - Claude: `"thinking": {"type": "adaptive"}`, `"output_config": {"effort": "low"}`
+3. **최대 토큰 수는 추론 토큰이 합산되므로 최소 `1500` 이상으로 설정한다.**
+   - OpenAI는 반드시 `max_completion_tokens` 이름을 사용한다.
+4. **시스템 프롬프트는 각 사의 최신 전용 위치에 넣는다.**
+   - OpenAI: `"role": "developer"`, Gemini: `"systemInstruction"`, Claude: `"system"`
