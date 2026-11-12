@@ -127,10 +127,12 @@ def validate_and_refine_pr(
                 if next_header
                 else pr_body[start_pos:]
             )
+            # 오려낸 구간 안에 불릿(- 또는 *)이 있는지 검사
             has_bullet = any(
                 line.strip().startswith(("-", "*"))
                 for line in section_content.splitlines()
             )
+            # 불릿이 없으면 제목 바로 아랫줄에 끼워 넣기
             if not has_bullet:
                 pr_body = (
                     pr_body[:start_pos]
