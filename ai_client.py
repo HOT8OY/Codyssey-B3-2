@@ -150,7 +150,7 @@ def call_ai_api(system_prompt: str, user_prompt: str, model: str, temperature: f
             data = json.loads(response_text)
         
     except urllib.error.HTTPError as e:
-        error_detail = e.read().decode("utf-8", error="replace")
+        error_detail = e.read().decode("utf-8", errors="replace")
         if e.code == 400:
             reason = "잘못된 요청 파라미터 (모델 이름이나 지원하지 않는 옵션인지 확인하세요)"
         elif e.code == 401:

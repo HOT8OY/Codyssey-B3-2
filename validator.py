@@ -43,7 +43,7 @@ def validate_and_refine_commit(raw_text: str, changed_files: List[str]) -> str:
     # 본문 위아래의 불필요한 빈 줄 제거
     while body_lines and not body_lines[0].strip():
         body_lines.pop(0)
-    while body_lines and not body_line[-1].strip():
+    while body_lines and not body_lines[-1].strip():
         body_lines.pop()
     
     # [검증 2] 본문에 불릿('- ' 또는 '* ')이 하나도 없으면 기본 변경 파일 불릿을 추가합니다.
@@ -80,8 +80,8 @@ def validate_and_refine_pr(
             body_start_idx = idx + 1
             break
         elif not stripped.startswith("##"):
-            pr_title = stripped.lstrip("#")
-            body_start_iox = idx + 1
+            pr_title = stripped.lstrip("#").strip()
+            body_start_idx = idx + 1
             break
         else:
             pr_title = f"feat: {changed_files[0]} 등 {len(changed_files)}개 파일 변경 사항 반영"
@@ -106,7 +106,7 @@ def validate_and_refine_pr(
 
     for section_name, fallback_bullet in required_sections:
         header_pattern = re.compile(
-            rf"^##+\s{re.escape(section_name)}\b",
+            rf"^##+\s*{re.escape(section_name)}\b",
             re.IGNORECASE | re.MULTILINE,
         )
         match = header_pattern.search(pr_body)
@@ -119,7 +119,7 @@ def validate_and_refine_pr(
             start_pos = match.end()
             next_header = re.search(r"^##+\s+", pr_body[start_pos:], re.MULTILINE)
             section_content = (
-                pr_body[start_pos : next_header.start()]
+                pr_body[start_pos : start_pos + next_header.start()]
                 if next_header
                 else pr_body[start_pos:]
             )
